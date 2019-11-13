@@ -1,6 +1,9 @@
 # cour-sine
 A python pacakge to help you find out the *cosine* angles between courses.
 
+
+![Logo](logo.png)
+
 Roadmap:
 
 [x] get system to work
@@ -9,5 +12,5 @@ Roadmap:
 [ ] add testing
 [ ] completely separate data and logic
 [x] add docstring to functions
-[ ] add a summary/workable notebook
+[X] add a summary/workable notebook
 [ ] make a package and submit it

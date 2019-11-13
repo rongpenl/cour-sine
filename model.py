@@ -3,7 +3,6 @@ import string
 import gensim.downloader as api
 import json
 import numpy as np
-from tqdm import tqdm
 from collections import Counter
 from sklearn.model_selection import GridSearchCV
 from sklearn.base import BaseEstimator
@@ -70,7 +69,7 @@ class word2vecEstimator(BaseEstimator):
         # Obtain normalized information to avoid data leaking
         # in fit, ground truth can be peaked
         scores = []
-        for sent1, sent2 in tqdm(zip(sentences1, sentences2)):
+        for sent1, sent2 in zip(sentences1, sentences2):
             vecs1, vecs2 = [], []
             for word in sent1:
                 try:
@@ -282,7 +281,7 @@ class Model:
                                for i in range(len(trainUIDs))])
             self.bestParam = gs.best_params_
             self.vecModelEstimator = gs.best_estimator_
-            # print("CV results:", gs.cv_results_)
+            print("CV results:", gs.cv_results_)
         if self.algo == "doc2vec":
             tuned_params = {"dm": [0, 1],
                             "vector_size": [50, 20, 10],

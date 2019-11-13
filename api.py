@@ -5,7 +5,7 @@ import random
 import json
 import numpy as np
 from collections import Counter
-import os
+from os import mkdir
 import pickle
 from model import Model, word2vecEstimator, doc2vecEstimator
 from dataPreparer import generateUIDs, splitDataSets, initPrepare
@@ -20,7 +20,7 @@ def dataSaver():
     _, uids, COURSENAMES, COURSEDESCRIPTIONS, TRUTHTABLE = initPrepare()
     random.shuffle(uids)
     try:
-        os.mkdir("data", 755)
+        mkdir("data", 755)
     except:
         print("data directory already existis.")
     with open('data/coursedescriptions.json', 'w') as outfile:
@@ -273,12 +273,12 @@ class API:
                         inputString + " doesn't contain word in glove model vocabulary. This is strange. Please check.")
                     return None
 
-    def queryPrereqsCIDs(self, cids):
+    def queryPrereqsCIDs(self, cids, verbose = False):
         """find the number of the prerequisites courses(cids) input is a list of cids that are in the course(cid)'s top-3 related courses.
 
         :param cids: a list of **USC** course ids
         :type cids: list of string
-        :return: a list of integer with the same lengh of input, each representing the number of prerequisites courses that are in the top-3 related courses of the corresponding course. Note, if a course id doesen't exist in the database, the value will be -1, it is the user's responsibility to check it.
+        :return: a list of integer with the same lengh of input, each representing the number of prerequisites courses that are in the top-3 related courses of the corresponding course. Note, if a course id doesen't exist in the database or it has no prereqs, the value will be -1, it is the user's responsibility to check it.
         :rtype: list
         """
         '''
@@ -293,10 +293,12 @@ class API:
                 continue
             if len(COURSES[cid]["prereqs"]) == 0:
                 # cid has no prereqsites courses
-                print(cid + " has no prerequsites.")
-                res.append(0)
+                if verbose:
+                    print(cid + " has no prerequsites.")
+                res.append(-1)
             else:
-                print(cid + " has prerequisites: ", COURSES[cid]["prereqs"])
+                if verbose:
+                    print(cid + " has prerequisites: ", COURSES[cid]["prereqs"])
                 top3ID = self._queryCID(COURSES, cid, 3)
                 overlap = 0
                 for prereq in COURSES[cid]["prereqs"]:
