@@ -4,20 +4,19 @@ api interface to provide the required function inquiries
 import random
 import json
 import numpy as np
+from collections import Counter
+import os
+import pickle
 from model import Model, word2vecEstimator, doc2vecEstimator
 from dataPreparer import generateUIDs, splitDataSets, initPrepare
 from preprocessor import Preprocessor
 from gensim.models import Word2Vec
 from Levenshtein import distance as lev_distance
 import gensim.downloader as gensim_api
-import os
-import pickle
-
 
 def dataSaver():
-    '''
-    A time consuming function that generates all useful datasets and save them locally
-    '''
+    """This function prepares and save doc2vec, word2vec and glove vectors to directory ./data. It also saves the trained model for fast loading when use. Note theoretically the model needs to be trained by trainCV() methods. This is very computationally expensive. The train is therefore explicitly done using the whole datasets without CV.
+    """
     _, uids, COURSENAMES, COURSEDESCRIPTIONS, TRUTHTABLE = initPrepare()
     random.shuffle(uids)
     try:
@@ -31,40 +30,41 @@ def dataSaver():
     with open('data/coursenames.json', 'w') as outfile:
         json.dump(COURSENAMES, outfile)
     # generate best word2vec model, best doc2vec model and saves them
-    tmpModel = Model("word2vec")
-    tmpModel2 = Model("doc2vec")
+    w2vModel = Model("word2vec")
+    d2vModel = Model("doc2vec")
     random.seed(2019)
     # glove model mean vector saves
     gloveModel = gensim_api.load("word2vec-google-news-300")
     p1 = Preprocessor()
     # use the whole data sets can take extremely long time
-    # tmpModel.trainCV(uids)
-    # tmpModel2.trainCV(uids)
+    # w2vModel.trainCV(uids)
+    # d2vModel.trainCV(uids)
     # the following training methods is solely for performance reasons.
-    uids, desc1, desc2, _, _ = tmpModel.augmentData(uids)  # any model works
+    uids, desc1, desc2, _, _ = w2vModel.augmentData(uids)  # any model works
     # cross validation on the word2vecEstimator
+
     sentences1 = [p1.process(desc) for desc in desc1]
     sentences2 = [p1.process(desc) for desc in desc2]
-    tmpModel.vecModelEstimator = word2vecEstimator(TRUTHTABLE)
+    w2vModel.vecModelEstimator = word2vecEstimator(TRUTHTABLE)
 
-    tmpModel.vecModelEstimator.fit(uids, [(sentences1[i], sentences2[i])
+    w2vModel.vecModelEstimator.fit(uids, [(sentences1[i], sentences2[i])
                                           for i in range(len(uids))])
 
-    tmpModel2.vecModelEstimator = doc2vecEstimator(TRUTHTABLE)
-    tmpModel2.vecModelEstimator.fit(uids, [(sentences1[i], sentences2[i])
-                                           for i in range(len(uids))])
+    d2vModel.vecModelEstimator = doc2vecEstimator(TRUTHTABLE)
+    d2vModel.vecModelEstimator.fit(uids, [(sentences1[i], sentences2[i])
+                                          for i in range(len(uids))])
 
     word2vecJson = {}
     glove2vecJson = {}
     doc2vecJson = {}
     for cid, words in COURSEDESCRIPTIONS.items():
-        vec3 = tmpModel2.vecModelEstimator.model.infer_vector(
+        vec3 = d2vModel.vecModelEstimator.model.infer_vector(
             p1.process(words))
         doc2vecJson[cid] = list(map(lambda x: str(x), vec3))
         vecs1, vecs2 = [], []
         for word in p1.process(words):
             try:
-                vecs1.append(tmpModel.vecModelEstimator.model[word])
+                vecs1.append(w2vModel.vecModelEstimator.model[word])
             except:
                 print(word + " is not in trained word2vec model, skipped.")
             try:
@@ -85,19 +85,21 @@ def dataSaver():
     with open('data/bestdoc2vec.json', 'w') as outfile:
         json.dump(doc2vecJson, outfile)
 
-    # pickle best models
+    # pickle best models and save them
     with open("data/bestword2vec.pickle", "wb") as outputfile:
-        pickle.dump(tmpModel, outputfile)
+        pickle.dump(w2vModel, outputfile)
     with open("data/bestdoc2vec.pickle", "wb") as outputfile:
-        pickle.dump(tmpModel2, outputfile)
+        pickle.dump(d2vModel, outputfile)
 
 
 def uclaDataSaver():
+    """ Given the model trained by api.dataSaver() and ucla courses parsed by crawler.uclaParse(), api.uclaDataSaver() prepares and saves doc2vec, word2vec and glove vector of ucla courses locally for fast loading.
+    """
     try:
         with open("data/bestword2vec.pickle", "rb") as fp:
-            tmpModel = pickle.load(fp)
+            w2vModel = pickle.load(fp)
         with open("data/bestdoc2vec.pickle", "rb") as fp:
-            tmpModel2 = pickle.load(fp)
+            d2vModel = pickle.load(fp)
     except:
         print("Please run dataSaver() first to obtain model trained on USC courses")
         return
@@ -115,13 +117,13 @@ def uclaDataSaver():
     ucladoc2vecJson = {}
     for cid, course in UCLACOURSES.items():
         words = course["desc"]
-        vec3 = tmpModel2.vecModelEstimator.model.infer_vector(
+        vec3 = d2vModel.vecModelEstimator.model.infer_vector(
             p1.process(words))
         ucladoc2vecJson[cid] = list(map(lambda x: str(x), vec3))
         vecs1, vecs2 = [], []
         for word in p1.process(words):
             try:
-                vecs1.append(tmpModel.vecModelEstimator.model[word])
+                vecs1.append(w2vModel.vecModelEstimator.model[word])
             except:
                 print(word + " is not in trained word2vec model, skipped.")
             try:
@@ -144,7 +146,16 @@ def uclaDataSaver():
 
 
 class API:
+    """API is the exposed objects for end user to interact with the application.
+
+    :param model_algo: one of the five algorithms. The default is word2vec
+    :type model_algo: string.
+    """
+
     def __init__(self, model_algo="word2vec"):
+        """Constructor method. Note 'glove' model may require a very long time to load on laptop, therefore is not recommended.
+
+        """
         if model_algo == "word2vec":
             with open("data/bestword2vec.pickle", "rb") as fp:
                 self.model = pickle.load(fp)
@@ -158,6 +169,17 @@ class API:
         self.preprocessor = Preprocessor()
 
     def stringQuery(self, inputString, verbose=False):
+        """Query with a string to obtain top 10 most related **USC** courses with respect to the input string.
+
+        :param inputString: the string to query with
+        :type inputString: string
+        :param verbose: If true, output unseen word in the prediction steps
+        :type verbose: bool
+
+        :return: A 10-element list of tuples. each tuple contains the course id and corresponding scores. Note the scores' absolute values can't be compared across chosen algorithms in principle.
+        :rtype: list
+
+        """
         if self.model.algo in self.model.trainable:
             if self.model.algo == "word2vec":
                 words = self.preprocessor.process(inputString)
@@ -249,18 +271,26 @@ class API:
                 else:
                     print(
                         inputString + " doesn't contain word in glove model vocabulary. This is strange. Please check.")
-                    return
+                    return None
 
     def queryPrereqsCIDs(self, cids):
+        """find the number of the prerequisites courses(cids) input is a list of cids that are in the course(cid)'s top-3 related courses.
+
+        :param cids: a list of **USC** course ids
+        :type cids: list of string
+        :return: a list of integer with the same lengh of input, each representing the number of prerequisites courses that are in the top-3 related courses of the corresponding course. Note, if a course id doesen't exist in the database, the value will be -1, it is the user's responsibility to check it.
+        :rtype: list
+        """
         '''
-        find the number of the prereqsites courses(cids)
-        input is a list of cids
-        that are in the course(cid)'s top-3 related courses
+        
         '''
         with open("data/courses.json", "r") as fp:
             COURSES = json.load(fp)
         res = []
         for cid in cids:
+            if cid not in COURSES:
+                res.append(-1)
+                continue
             if len(COURSES[cid]["prereqs"]) == 0:
                 # cid has no prereqsites courses
                 print(cid + " has no prerequsites.")
@@ -276,13 +306,20 @@ class API:
         return res
 
     def querySameSchoolCIDs(self, cids):
-        '''
-        query 
-        '''
+        """Find the ratio of same school courses in the top 10 related courses for each course id in the parameter cids.
+
+        :param cids: a list of **USC** course ids
+        :type cids: list of string
+        :return: the corresponding same-school course ratio for each course id in cids. Note, if a course id doesen't exist in the database, the value will be -1, it is the user's responsibility to check it.
+        :rtype: a list of float in [0,1]
+        """
         with open("data/courses.json", "r") as fp:
             COURSES = json.load(fp)
         res = []
         for cid in cids:
+            if cid not in COURSES:
+                res.append(-1)
+                continue
             school = COURSES[cid]["school"]
             top10ID = self._queryCID(COURSES, cid, 10)
             print("Top10 related courses of "+cid + ": ", top10ID)
@@ -292,19 +329,25 @@ class API:
         return res
 
     def _queryCID(self, COURSES, cid, k):
-        '''
-        find the prereq courses of the course(cid) 
-        '''
+        """Query top [k] **USC** courses which are relevant to course [cid]
+
+        :param COURSES: the dictionary that stores the USC course information
+        :type COURSES: dictionary
+        :param cid: course id
+        :type cid: string
+        :param k: number of returned relevant courses
+        :type k: integer
+        :return: course ids of relevant courses
+        :rtype: k-element list of string
+        """
 
         top = self._queryTopKCID(cid=cid, k=k, COURSES=COURSES)
         topID = [c[0] for c in top]
         return topID
 
     def _queryTopKCID(self, cid, k, COURSES):
-        '''
-        return the top k related courses of a course.
-        k should be smaller than or equal to 10 in this case
-        '''
+        """helper function of _queryCID()
+        """
         assert(k <= 10)
         if self.model.algo == "Levenshtein":
             string = COURSES[cid]["name"]
@@ -313,11 +356,12 @@ class API:
         return self.stringQuery(string)[:k]
 
     def queryUCLACID(self, cid):
-        '''
-        Based on the link provided, only courses from the computer science department are considered.
-
-        This function has logic overlap with queryString() but queryString() only allows quering on usc courses.
-        '''
+        """Query UCLA computer science course given a course id of USC courses. Based on the link provided, only courses from the computer science department are considered. This method has logic overlap with queryString() but queryString() only allows quering on USC courses. In the future, the two methods may merge.
+        :param cid: course ID of a USC course
+        :type cid: string
+        :return: tuple of course id and course name of counterpart UCLA course
+        :rtype: 2-element tuple of strings
+        """
         try:
             # reading ucla course info and vector representations of courses
             with open("data/uclacourses.json", "r") as fp:
@@ -367,7 +411,7 @@ class API:
             resScore, resId, resName = -1, None, None  # magic number
             for uclaID, uclaVec in uclaWord2Vec.items():
                 uclaVec = [float(x) for x in uclaVec]
-                score = np.dot(uscVec,uclaVec) / \
+                score = np.dot(uscVec, uclaVec) / \
                     np.linalg.norm(uclaVec)/np.linalg.norm(uscVec)
                 if score > resScore:
                     resScore = score
@@ -380,11 +424,12 @@ class API:
                 uscDoc2Vec = json.load(fp)
             with open("data/uclabestdoc2vec.json", "r") as fp:
                 uclaDoc2Vec = json.load(fp)
-            uscVec = [float(x) for x in  uscDoc2Vec[cid]]
+            uscVec = [float(x) for x in uscDoc2Vec[cid]]
             resScore, resId, resName = -1, None, None  # magic number
             for uclaID, uclaVec in uclaDoc2Vec.items():
                 uclaVec = [float(x) for x in uclaVec]
-                score = np.dot(uscVec,uclaVec)/np.linalg.norm(uclaVec)/np.linalg.norm(uscVec)
+                score = np.dot(uscVec, uclaVec) / \
+                    np.linalg.norm(uclaVec)/np.linalg.norm(uscVec)
                 if score > resScore:
                     resScore = score
                     resId = uclaID
@@ -411,5 +456,14 @@ class API:
 
 
 def _Jaccard(ls1, ls2):
+    """Return the Jaccard similarity of two lists
+
+    :param ls1: first list, element can be of any kind.
+    :type ls1: list
+    :param ls2: second list, element can be of any kind.
+    :type ls2: list
+    :return: a ratio indicating the similarity between ls1 and ls2, 0 means no similarity at all, 1 means identical (in the orderless sense).
+    :rtype: float
+    """
     interNum = len(list((Counter(ls1) & Counter(ls2)).elements()))
     return interNum/(len(ls1)+len(ls2)-interNum)

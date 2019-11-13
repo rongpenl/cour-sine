@@ -5,21 +5,38 @@ import json
 from tqdm import tqdm
 
 
-def initialParse(url="https://classes.usc.edu/term-20193/",
-                 school="engineering"):
+def initialParse(url="https://classes.usc.edu/term-20193/", school="engineering"):
+    """the initialParse() parses the engineering/medical school websites and return the school name, as well as a raw list of html elements that contains department information. The natural downstream function is buildDepartments which takes those two values exactly.
+
+    :param url: school url, defaults to "https://classes.usc.edu/term-20193/"
+    :type url: str
+    :param school: school, medical or engineering only, defaults to "engineering"
+    :type school: str
+    """
     source = urllib.request.urlopen(url)
     soup = bs.BeautifulSoup(source, "html.parser")
     if school == "engineering":
-        return school, soup.findAll(attrs={"data-type": "department",
-                                           "data-school": "Engineering"})
+        departmentList = soup.findAll(attrs={"data-type": "department",
+                                             "data-school": "Engineering"})
+        return school, departmentList
     elif school == "medical":
-        return school, soup.findAll(attrs={"data-type": "department",
-                                           "data-school": "Medicine"})
+        departmentList = soup.findAll(attrs={"data-type": "department",
+                                             "data-school": "Medicine"})
+        return school, departmentList
     else:
-        raise Exception("wrong school argument: ", school)
+        print("wrong school argument: ", school)
 
 
 def buildDepartments(school, departmentLists):
+    """the downstream processing of initialParse(), returns a list of department objects. When initializing department, the course list will be built.
+    
+    :param school: school, engineering and medical only
+    :type school: string
+    :param departmentLists: a list of departments of given school.
+    :type departmentLists: list
+    :return: a list of department objects
+    :rtype: list
+    """
     Names = [a.get("data-title") for a in departmentLists]
     Hrefs = [next(a.children).get("href") for a in departmentLists]
     assert(len(Names) == len(Hrefs))
@@ -27,10 +44,8 @@ def buildDepartments(school, departmentLists):
 
 
 def uclaParse():
-    '''
-    The function will directly build a
-    UCLA CS course webpage is special. Each course doesn't have its own url.
-    '''
+    """The function will directly build a UCLA CS course webpage is special. Each course doesn't have its own url.
+    """
     url = "https://www.registrar.ucla.edu/Academics/Course-Descriptions/Course-Details?SA=COM+SCI&funsel=3"
     source = urllib.request.urlopen(url)
     soup = bs.BeautifulSoup(source, "html.parser")
@@ -48,7 +63,18 @@ def uclaParse():
 
 
 class Department:
+    """The department class 
+    """
     def __init__(self, school, name, url):
+        """Constructor method
+        
+        :param school: school name
+        :type school: string
+        :param name: department name
+        :type name: string
+        :param url: url of department
+        :type url: string
+        """
         self.name = name
         self.url = url
         self.classLists = []
@@ -59,13 +85,12 @@ class Department:
         return json.dumps({"department name": self.name,
                            "department url": self.url})
 
-    def findClassById(self, cid):
-        for course in self.classLists:
-            if course.cid == cid:
-                return course
-        return None
-
     def obtainClasses(self, school):
+        """build the classLists field of the object. There is a design flaw passing 'school' around. Will fix it in future version.
+
+        :param school: school name
+        :type school: string
+        """
         source = urllib.request.urlopen(self.url)
         soup = bs.BeautifulSoup(source, "html.parser")
         courseLists = soup.findAll(
@@ -96,7 +121,27 @@ class Department:
 
 
 class Class:
+    """The course(class) class.
+    
+    """
     def __init__(self, cid, name, url, desc, prereqs, coreqs, school):
+        """Constructor function
+        
+        :param cid: course id
+        :type cid: string
+        :param name: course name
+        :type name: string
+        :param url: course url
+        :type url: string
+        :param desc: course description
+        :type desc: string
+        :param prereqs: list of prereqs
+        :type prereqs: list of string
+        :param coreqs: list of coreqs
+        :type coreqs: list of string
+        :param school: school of the department which offers the course
+        :type school: string
+        """
         self.cid = cid
         self.name = name
         self.url = url
