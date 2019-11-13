@@ -3,7 +3,7 @@
 A python pacakge to help you find out the *cosine* angles between courses.
 
 <p align="center">
-  <img width="200%" src="logo.png">
+  <img width="100%" src="logo.png">
 </p>
 
 TODO:
