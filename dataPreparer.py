@@ -140,6 +140,8 @@ def _metaDataSave():
             }
     with open("data/courses.json","w") as fp:
         json.dump(COURSES,fp)
+    # ucla
+    uclaParse()
 
 
 def initPrepare():

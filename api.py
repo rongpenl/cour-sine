@@ -54,7 +54,7 @@ def dataSaver():
     tmpModel2.vecModelEstimator.fit(uids, [(sentences1[i], sentences2[i])
                                            for i in range(len(uids))])
 
-    word2vecJSON = {}
+    word2vecJson = {}
     glove2vecJson = {}
     doc2vecJson = {}
     for cid, words in COURSEDESCRIPTIONS.items():
@@ -76,21 +76,71 @@ def dataSaver():
             glove2vecJson[cid] = list(map(lambda x: str(x), vec2))
         if len(vecs1) != 0:
             vec1 = np.mean(np.array(vecs1), axis=0)
-            word2vecJSON[cid] = list(map(lambda x: str(x), vec1))
+            word2vecJson[cid] = list(map(lambda x: str(x), vec1))
 
     with open('data/bestword2vec.json', 'w') as outfile:
-        json.dump(word2vecJSON, outfile)
+        json.dump(word2vecJson, outfile)
     with open('data/glove2vec.json', 'w') as outfile:
         json.dump(glove2vecJson, outfile)
     with open('data/bestdoc2vec.json', 'w') as outfile:
         json.dump(doc2vecJson, outfile)
+
     # pickle best models
     with open("data/bestword2vec.pickle", "wb") as outputfile:
         pickle.dump(tmpModel, outputfile)
     with open("data/bestdoc2vec.pickle", "wb") as outputfile:
         pickle.dump(tmpModel2, outputfile)
 
-    return
+
+def uclaDataSaver():
+    try:
+        with open("data/bestword2vec.pickle", "rb") as fp:
+            tmpModel = pickle.load(fp)
+        with open("data/bestdoc2vec.pickle", "rb") as fp:
+            tmpModel2 = pickle.load(fp)
+    except:
+        print("Please run dataSaver() first to obtain model trained on USC courses")
+        return
+    gloveModel = gensim_api.load("word2vec-google-news-300")
+    p1 = Preprocessor()
+    try:
+        with open("data/uclacourses.json", "r") as fp:
+            UCLACOURSES = json.load(fp)
+    except:
+        print("Please run crawler.uclaDataSaver() to obtain uclaCourses.json")
+        return
+
+    uclaword2vecJson = {}
+    uclaglove2vecJson = {}
+    ucladoc2vecJson = {}
+    for cid, course in UCLACOURSES.items():
+        words = course["desc"]
+        vec3 = tmpModel2.vecModelEstimator.model.infer_vector(
+            p1.process(words))
+        ucladoc2vecJson[cid] = list(map(lambda x: str(x), vec3))
+        vecs1, vecs2 = [], []
+        for word in p1.process(words):
+            try:
+                vecs1.append(tmpModel.vecModelEstimator.model[word])
+            except:
+                print(word + " is not in trained word2vec model, skipped.")
+            try:
+                vecs2.append(gloveModel[word])
+            except:
+                print(word + " is not in glove model, skipped.")
+        if len(vecs2) != 0:
+            vec2 = np.mean(np.array(vecs2), axis=0)
+            uclaglove2vecJson[cid] = list(map(lambda x: str(x), vec2))
+        if len(vecs1) != 0:
+            vec1 = np.mean(np.array(vecs1), axis=0)
+            uclaword2vecJson[cid] = list(map(lambda x: str(x), vec1))
+
+    with open('data/uclabestword2vec.json', 'w') as outfile:
+        json.dump(uclaword2vecJson, outfile)
+    with open('data/uclaglove2vec.json', 'w') as outfile:
+        json.dump(uclaglove2vecJson, outfile)
+    with open('data/uclabestdoc2vec.json', 'w') as outfile:
+        json.dump(ucladoc2vecJson, outfile)
 
 
 class API:
@@ -198,7 +248,7 @@ class API:
                         return sorted(scores, key=lambda pair: -pair[1])[:10]
                 else:
                     print(
-                        inputString + " contains no word in glove model. This is strange. Please check.")
+                        inputString + " doesn't contain word in glove model vocabulary. This is strange. Please check.")
                     return
 
     def queryPrereqsCIDs(self, cids):
@@ -235,7 +285,7 @@ class API:
         for cid in cids:
             school = COURSES[cid]["school"]
             top10ID = self._queryCID(COURSES, cid, 10)
-            print("Top10 related courses of "+cid +": ",top10ID)
+            print("Top10 related courses of "+cid + ": ", top10ID)
             ratio = np.mean([COURSES[rel_cid]["school"]
                              == school for rel_cid in top10ID])
             res.append(ratio)
@@ -262,12 +312,104 @@ class API:
             string = COURSES[cid]["desc"]
         return self.stringQuery(string)[:k]
 
-    def queryUCLA(self, cids):
+    def queryUCLACID(self, cid):
         '''
-        Based on the link provided, only courses from the computer science department are considered
+        Based on the link provided, only courses from the computer science department are considered.
+
+        This function has logic overlap with queryString() but queryString() only allows quering on usc courses.
         '''
+        try:
+            # reading ucla course info and vector representations of courses
+            with open("data/uclacourses.json", "r") as fp:
+                uclaCourses = json.load(fp)
+        except:
+            print(
+                "Please run API().uclaDataSaver() first to obtain vector representation of the data.")
+            return
+        # can be persistent
 
-        return
+        if self.model.algo == "Levenshtein":
+            with open("data/coursenames.json", "r") as fp:
+                COURSENAMES = json.load(fp)
+            uscName = COURSENAMES[cid]
+            resdist, resId, resName = 10000, None, None  # magic number
+            for uclaID in uclaCourses.keys():
+                uclaName = uclaCourses[uclaID]["name"]
+                dist = lev_distance(uscName, uclaName) / \
+                    max(len(uscName), len(uclaName))
+                if dist < resdist:
+                    resdist = dist
+                    resId = uclaID
+                    resName = uclaName
+            return (resId, resName)
+        # the rest needs descriptions
+        with open("data/coursedescriptions.json", "r") as fp:
+            COURSEDESCRIPTIONS = json.load(fp)
+        p1 = Preprocessor()
+        if self.model.algo == "Jaccard":
+            uscDesc = p1.process(COURSEDESCRIPTIONS[cid])
+            resScore, resId, resName = -1, None, None
+            for uclaID in uclaCourses.keys():
+                uclaDesc = p1.process(uclaCourses[uclaID]["desc"])
+                score = _Jaccard(uscDesc, uclaDesc)
+                if score > resScore:
+                    resScore > score
+                    resId = uclaID
+                    resName = uclaCourses[uclaID]["name"]
+            return (resId, resName)
 
-    def _queryUCLACID(self, cid):
-        return
+        elif self.model.algo == "word2vec":
+            with open("data/bestword2vec.json", "r") as fp:
+                uscWord2Vec = json.load(fp)
+            with open("data/uclabestword2vec.json", "r") as fp:
+                uclaWord2Vec = json.load(fp)
+            uscVec = [float(x) for x in uscWord2Vec[cid]]
+            resScore, resId, resName = -1, None, None  # magic number
+            for uclaID, uclaVec in uclaWord2Vec.items():
+                uclaVec = [float(x) for x in uclaVec]
+                score = np.dot(uscVec,uclaVec) / \
+                    np.linalg.norm(uclaVec)/np.linalg.norm(uscVec)
+                if score > resScore:
+                    resScore = score
+                    resId = uclaID
+                    resName = uclaCourses[uclaID]["name"]
+            return (resId, resName)
+
+        elif self.model.algo == "doc2vec":
+            with open("data/bestdoc2vec.json", "r") as fp:
+                uscDoc2Vec = json.load(fp)
+            with open("data/uclabestdoc2vec.json", "r") as fp:
+                uclaDoc2Vec = json.load(fp)
+            uscVec = [float(x) for x in  uscDoc2Vec[cid]]
+            resScore, resId, resName = -1, None, None  # magic number
+            for uclaID, uclaVec in uclaDoc2Vec.items():
+                uclaVec = [float(x) for x in uclaVec]
+                score = np.dot(uscVec,uclaVec)/np.linalg.norm(uclaVec)/np.linalg.norm(uscVec)
+                if score > resScore:
+                    resScore = score
+                    resId = uclaID
+                    resName = uclaCourses[uclaID]["name"]
+            return (resId, resName)
+
+        else:
+            assert(self.model.algo == "glove")
+            with open("data/uclaglove2vec.json", "r") as fp:
+                uclaGlove = json.load(fp)
+            with open("data/glove2vec.json", "r") as fp:
+                uscGlove = json.load(fp)
+            uscVec = [float(x) for x in uscGlove[cid]]
+            resScore, resId, resName = -1, None, None  # magic number
+            for uclaID, uclaVec in uclaGlove.items():
+                uclaVec = [float(x) for x in uclaVec]
+                score = np.dot(uscVec, uclaVec) / \
+                    np.linalg.norm(uclaVec)/np.linalg.norm(uscVec)
+                if score > resScore:
+                    resScore = score
+                    resId = uclaID
+                    resName = uclaCourses[uclaID]["name"]
+            return (resId, resName)
+
+
+def _Jaccard(ls1, ls2):
+    interNum = len(list((Counter(ls1) & Counter(ls2)).elements()))
+    return interNum/(len(ls1)+len(ls2)-interNum)
