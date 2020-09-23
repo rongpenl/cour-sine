@@ -1,18 +1,34 @@
 # coursine
 
+Find the right computer or data science course for you based on your current backgrounds, interest and goals.
+
 <p align="left">
-  <img width="20%" src="logo.png">
+  <img width="30%" src="assets/logo.png">
 </p>
 
-A python pacakge to help you find out the ~~cosine~~ distances between courses.
+A simple Python project that utilizes the following tools or technologies.
 
-TODO:
+1. Web crawling and parsing.
+2. Natural language processing
+3. ElasticSearch
+4. Flask
+5. React
+6. Heroku 
+
+
+Under construction:
 
 - [x] get system to work
-- [ ] minimize disk file opening
-- [ ] build graph data structure of prereq/coreq relationship
-- [ ] add testing
-- [ ] completely separate data and logic
 - [x] add docstring to functions
-- [X] add a summary/workable notebook
-- [ ] make a package and submit it
+- [x] add a summary/workable notebook
+- [ ] develop a data model for the courses
+- [ ] develop an UI
+- [ ] develop the search API
+- [ ] migrate data to the cloud
+- [ ] online
+
+## Want to contribute?
+
+### Contribute a course
+
+### Bugs, feature requests, etc
