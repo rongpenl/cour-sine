@@ -1,10 +1,10 @@
-# cour-sine
+# coursine
 
-A python pacakge to help you find out the *cosine* angles between courses.
-
-<p align="center">
-  <img width="100%" src="logo.png">
+<p align="left">
+  <img width="20%" src="logo.png">
 </p>
+
+A python pacakge to help you find out the ~~cosine~~ distances between courses.
 
 TODO:
 
